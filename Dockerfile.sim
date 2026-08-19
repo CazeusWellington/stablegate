@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy simulation requirements
+COPY apps/simulation/requirements.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy simulation source
+COPY apps/simulation ./
+
+# Run tests
+CMD ["pytest", "src/tests/", "-v"]

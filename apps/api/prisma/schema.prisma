@@ -1,0 +1,479 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USERS ────────────────────────────────────────────────────────────────────
+
+model User {
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  username            String   @unique
+  passwordHash        String
+  walletBalance       Decimal  @default(0) @db.Decimal(10, 2)
+  auctionSuccessRate  Float    @default(0)
+  auctionWins         Int      @default(0)
+  auctionTotal        Int      @default(0)
+  isAdmin             Boolean  @default(false)
+  stripeCustomerId    String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  horses              Horse[]
+  raceEntries         RaceEntry[]
+  bids                JockeyBid[]
+  marketListings      MarketplaceListing[]
+  marketPurchases     MarketplacePurchase[]
+  transactions        WalletTransaction[]
+  breedingAsOwner     BreedingRecord[]
+
+  @@index([email])
+  @@index([username])
+}
+
+// ─── HORSES ───────────────────────────────────────────────────────────────────
+
+model Horse {
+  id                  String      @id @default(cuid())
+  name                String
+  ownerId             String
+  owner               User        @relation(fields: [ownerId], references: [id])
+  status              HorseStatus @default(ACTIVE)
+
+  // Always revealed at purchase
+  speedFigure         Int         // 1–120 Beyer-style
+  runningStyle        RunningStyle
+  
+  // Hidden traits — null until discovered
+  favoredDistance     FavoredDistance?
+  surfacePreference   SurfaceType?
+  staminaRating       Int?        // 1–100
+  consistencyScore    Int?        // 1–100
+  peakAgeWindow       String?     // e.g. "4-6"
+  hiddenTalent        String?     // e.g. "Mud specialist"
+
+  // Discovery mechanics
+  discoveryInterval   Int         // races between unlocks (3–9)
+  discoveryHint       DiscoveryHint // "straightforward" | "moderate" | "complex"
+  traitsDiscovered    Int         @default(2) // starts with 2 revealed
+  trainerUnlocksUsed  Int         @default(0) // max 2 per career
+
+  // Career
+  totalRaces          Int         @default(0)
+  paidRaces           Int         @default(0)
+  wins                Int         @default(0)
+  totalEarnings       Decimal     @default(0) @db.Decimal(10, 2)
+  estimatedValue      Decimal     @default(0) @db.Decimal(10, 2)
+
+  // Lineage
+  sireId              String?
+  damId               String?
+  sire                Horse?      @relation("Lineage", fields: [sireId], references: [id])
+  dam                 Horse?      @relation("DamLineage", fields: [damId], references: [id])
+  offspringAsSire     Horse[]     @relation("Lineage")
+  offspringAsDam      Horse[]     @relation("DamLineage")
+
+  // Source
+  sourceType          HorseSource @default(AI_GENERATED)
+  equibaseId          String?     // populated when Equibase data is available
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  raceEntries         RaceEntry[]
+  breedingAsSire      BreedingRecord[] @relation("SireBreeding")
+  breedingAsDam       BreedingRecord[] @relation("DamBreeding")
+  marketListings      MarketplaceListing[]
+  traitEvents         TraitDiscoveryEvent[]
+
+  @@index([ownerId])
+  @@index([status])
+}
+
+// ─── JOCKEYS ──────────────────────────────────────────────────────────────────
+
+model Jockey {
+  id                  String        @id @default(cuid())
+  name                String
+  tier                JockeyTier
+  runningStyle        RunningStyle
+  
+  // Career stats (updated after every race)
+  careerRaces         Int           @default(0)
+  careerWins          Int           @default(0)
+  winRate             Float         @default(0)
+  top3Rate            Float         @default(0)
+  styleMatchWinRate   Float         @default(0)
+  dirtWinRate         Float         @default(0)
+  turfWinRate         Float         @default(0)
+  syntheticWinRate    Float         @default(0)
+  sprintWinRate       Float         @default(0)
+  routeWinRate        Float         @default(0)
+  earningsPerMount    Decimal       @default(0) @db.Decimal(10, 2)
+
+  // Computed composite score (used for tier ranking)
+  compositeScore      Float         @default(0)
+
+  // Economy
+  minimumPct          Float         // percentage of payout taken as fee
+  baseModifier        Float         // multiplier applied to horse composite score
+
+  // Style lock-in after 200 races
+  styleIsLocked       Boolean       @default(false)
+
+  // Tier progression tracking
+  seasonsAtCurrentTier Int          @default(0)
+  consecutivePromoSeasons Int       @default(0)
+  consecutiveDemoSeasons  Int       @default(0)
+
+  // Equibase mapping (slot in real jockey data here)
+  equibaseJockeyId    String?
+
+  isActive            Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  raceEntries         RaceEntry[]
+  bids                JockeyBid[]
+  seasonRecords       JockeySeasonRecord[]
+
+  @@index([tier])
+  @@index([compositeScore])
+}
+
+model JockeySeasonRecord {
+  id              String   @id @default(cuid())
+  jockeyId        String
+  jockey          Jockey   @relation(fields: [jockeyId], references: [id])
+  seasonNumber    Int
+  races           Int      @default(0)
+  wins            Int      @default(0)
+  winRate         Float    @default(0)
+  top3Rate        Float    @default(0)
+  earnings        Decimal  @default(0) @db.Decimal(10, 2)
+  tierAtStart     JockeyTier
+  tierAtEnd       JockeyTier?
+  wasPromoted     Boolean  @default(false)
+  wasRelegated    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([jockeyId, seasonNumber])
+}
+
+// ─── RACES ────────────────────────────────────────────────────────────────────
+
+model Race {
+  id                  String      @id @default(cuid())
+  name                String
+  tier                RaceTier
+  status              RaceStatus  @default(OPEN)
+
+  // Conditions
+  surface             SurfaceType
+  distance            FavoredDistance
+  fieldSize           Int         // max horses
+  minFieldSize        Int         @default(4)
+
+  // Economy
+  entryFee            Decimal     @default(0) @db.Decimal(10, 2)
+  houseRakePct        Float       // e.g. 0.15
+  jockeyPct           Float       // e.g. 0.08
+  guaranteedPurse     Decimal?    @db.Decimal(10, 2) // Gold/Classic only
+  actualPurse         Decimal     @default(0) @db.Decimal(10, 2)
+  ownerPool           Decimal     @default(0) @db.Decimal(10, 2)
+  houseRevenue        Decimal     @default(0) @db.Decimal(10, 2)
+
+  // Auction
+  auctionWindowSecs   Int         @default(600) // 10 min default
+  auctionOpensAt      DateTime?
+  auctionClosesAt     DateTime?
+
+  // Simulation
+  simulationJobId     String?
+  simulationInputs    Json?       // stored for audit
+  simulationOutputs   Json?       // stored for audit
+
+  // Scheduling
+  scheduledAt         DateTime?
+  completedAt         DateTime?
+  expiresAt           DateTime?   // if not filled, refund entries
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  entries             RaceEntry[]
+  bids                JockeyBid[]
+
+  @@index([status])
+  @@index([tier])
+  @@index([scheduledAt])
+}
+
+model RaceEntry {
+  id              String        @id @default(cuid())
+  raceId          String
+  race            Race          @relation(fields: [raceId], references: [id])
+  horseId         String
+  horse           Horse         @relation(fields: [horseId], references: [id])
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  jockeyId        String?
+  jockey          Jockey?       @relation(fields: [jockeyId], references: [id])
+  isGhostEntry    Boolean       @default(false) // AI-filled slot
+
+  // Jockey assignment
+  jockeyPct       Float?
+  jockeyAcquiredVia JockeyAcquiredVia?
+
+  // Result
+  finishPosition  Int?
+  finishTime      String?       // e.g. "1:35.2"
+  payout          Decimal?      @db.Decimal(10, 2)
+  jockeyFee       Decimal?      @db.Decimal(10, 2)
+  netPayout       Decimal?      @db.Decimal(10, 2)
+
+  // Simulation inputs (stored per entry for audit)
+  compositeScore  Float?
+  finalScore      Float?        // after variance
+
+  entryFeePaid    Decimal       @db.Decimal(10, 2)
+  entryFeeRefunded Boolean     @default(false)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([raceId, horseId])
+  @@index([raceId])
+  @@index([horseId])
+  @@index([userId])
+}
+
+model JockeyBid {
+  id              String          @id @default(cuid())
+  raceId          String
+  race            Race            @relation(fields: [raceId], references: [id])
+  jockeyId        String
+  jockey          Jockey          @relation(fields: [jockeyId], references: [id])
+  userId          String
+  user            User            @relation(fields: [userId], references: [id])
+  bidPct          Float
+  status          BidStatus       @default(PENDING)
+  tieBreakRoll    Int?            // dice roll value if used
+  resolvedAt      DateTime?
+  createdAt       DateTime        @default(now())
+
+  @@unique([raceId, jockeyId, userId])
+  @@index([raceId, jockeyId])
+}
+
+// ─── TRAIT DISCOVERY ──────────────────────────────────────────────────────────
+
+model TraitDiscoveryEvent {
+  id              String      @id @default(cuid())
+  horseId         String
+  horse           Horse       @relation(fields: [horseId], references: [id])
+  raceEntryId     String?
+  traitName       String      // e.g. "surfacePreference"
+  traitValue      String      // e.g. "TURF"
+  discoveredVia   DiscoveryMethod
+  racesAtUnlock   Int
+  bonusApplied    Boolean     @default(false)
+  bonusReason     String?     // e.g. "style+surface+distance match"
+  trainerUnlock   Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+
+  @@index([horseId])
+}
+
+// ─── BREEDING ─────────────────────────────────────────────────────────────────
+
+model BreedingRecord {
+  id              String    @id @default(cuid())
+  sireId          String
+  sire            Horse     @relation("SireBreeding", fields: [sireId], references: [id])
+  damId           String
+  dam             Horse     @relation("DamBreeding", fields: [damId], references: [id])
+  offspringId     String?   @unique
+  ownerId         String
+  owner           User      @relation(fields: [ownerId], references: [id])
+  breedingFee     Decimal   @db.Decimal(10, 2)
+  inheritanceLog  Json      // which parent each trait came from
+  mutationLog     Json      // which traits mutated and how
+  status          BreedingStatus @default(PENDING)
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([ownerId])
+}
+
+// ─── MARKETPLACE ──────────────────────────────────────────────────────────────
+
+model MarketplaceListing {
+  id              String          @id @default(cuid())
+  horseId         String
+  horse           Horse           @relation(fields: [horseId], references: [id])
+  sellerId        String
+  seller          User            @relation(fields: [sellerId], references: [id])
+  askingPrice     Decimal         @db.Decimal(10, 2)
+  status          ListingStatus   @default(ACTIVE)
+  expiresAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  purchases       MarketplacePurchase[]
+
+  @@index([status])
+  @@index([horseId])
+}
+
+model MarketplacePurchase {
+  id              String              @id @default(cuid())
+  listingId       String
+  listing         MarketplaceListing  @relation(fields: [listingId], references: [id])
+  buyerId         String
+  buyer           User                @relation(fields: [buyerId], references: [id])
+  salePrice       Decimal             @db.Decimal(10, 2)
+  houseCut        Decimal             @db.Decimal(10, 2)
+  sellerReceives  Decimal             @db.Decimal(10, 2)
+  stripePaymentId String?
+  createdAt       DateTime            @default(now())
+}
+
+// ─── WALLET & AUDIT ───────────────────────────────────────────────────────────
+
+model WalletTransaction {
+  id              String              @id @default(cuid())
+  userId          String
+  user            User                @relation(fields: [userId], references: [id])
+  type            TransactionType
+  amount          Decimal             @db.Decimal(10, 2)
+  balanceBefore   Decimal             @db.Decimal(10, 2)
+  balanceAfter    Decimal             @db.Decimal(10, 2)
+  description     String
+  referenceId     String?             // raceEntryId, listingId, etc.
+  referenceType   String?
+  stripePaymentId String?
+  createdAt       DateTime            @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum HorseStatus {
+  ACTIVE
+  RETIRED
+  FOAL
+  BREEDING_LOCKED
+}
+
+enum HorseSource {
+  AI_GENERATED
+  BRED
+  EQUIBASE_SEEDED  // future: real horse data via Equibase
+}
+
+enum RunningStyle {
+  FRONT_RUNNER
+  STALKER
+  PRESSER
+  CLOSER
+}
+
+enum SurfaceType {
+  DIRT
+  TURF
+  SYNTHETIC
+}
+
+enum FavoredDistance {
+  SPRINT    // under 7f
+  MID       // 7f–9f
+  ROUTE     // 1 mile+
+}
+
+enum DiscoveryHint {
+  STRAIGHTFORWARD
+  MODERATE
+  COMPLEX
+}
+
+enum RaceTier {
+  FREE
+  BRONZE
+  SILVER
+  GOLD
+  CLASSIC
+}
+
+enum RaceStatus {
+  OPEN
+  FILLING
+  AUCTION
+  LOCKED
+  SIMULATING
+  COMPLETED
+  CANCELLED
+}
+
+enum JockeyTier {
+  ROOKIE
+  BUDGET
+  MID
+  TOP
+  ELITE
+}
+
+enum BidStatus {
+  PENDING
+  WON
+  LOST
+}
+
+enum JockeyAcquiredVia {
+  AUCTION
+  OPEN_PICK
+}
+
+enum ListingStatus {
+  ACTIVE
+  SOLD
+  CANCELLED
+  EXPIRED
+}
+
+enum BreedingStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  RACE_ENTRY_FEE
+  RACE_PAYOUT
+  RACE_ENTRY_REFUND
+  TRAINER_UNLOCK
+  TRAINING_SESSION
+  BREEDING_FEE
+  MARKETPLACE_SALE
+  MARKETPLACE_PURCHASE
+  HORSE_BUYBACK
+  NEW_HORSE_PURCHASE
+  HOUSE_RAKE
+  JOCKEY_FEE
+  ADJUSTMENT
+}
+
+enum DiscoveryMethod {
+  RACE_INTERVAL
+  BONUS_INTERVAL
+  TRAINER_UNLOCK
+  BIRTH_REVEALED
+}
