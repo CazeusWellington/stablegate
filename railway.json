@@ -3,7 +3,7 @@
     "builder": "RAILPACK"
   },
   "deploy": {
-    "startCommand": "npx prisma generate && npx tsx apps/api/src/index.ts",
+    "startCommand": "npx prisma generate --schema=apps/api/prisma/schema.prisma && npx tsx apps/api/src/index.ts",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5
   }
