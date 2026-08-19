@@ -6,10 +6,6 @@ EQUIBASE INTEGRATION POINTS are marked with # [EQUIBASE] comments.
 When Equibase data is licensed, replace the placeholder coefficient
 tables with values derived from historical data.
 """
-import numpy as np
-from typing import Optional
-import random
-import math
 
 
 # ─── SURFACE FIT COEFFICIENTS ─────────────────────────────────────────────────
