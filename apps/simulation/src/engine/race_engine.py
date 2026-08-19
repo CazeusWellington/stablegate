@@ -6,7 +6,9 @@ EQUIBASE INTEGRATION POINTS are marked with # [EQUIBASE] comments.
 When Equibase data is licensed, replace the placeholder coefficient
 tables with values derived from historical data.
 """
-
+import numpy as np
+import random
+import math
 
 # ─── SURFACE FIT COEFFICIENTS ─────────────────────────────────────────────────
 # How much a horse's preferred surface vs actual race surface matters.
