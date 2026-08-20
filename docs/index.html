@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StableGate — Simulated Horse Racing</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink:       #0F0E0B;
+    --parchment: #F7F3EB;
+    --gold:      #C9973A;
+    --gold-lt:   #E8C97A;
+    --turf:      #2A5C3F;
+    --turf-lt:   #E6F0EA;
+    --dust:      #8C7B5E;
+    --rail:      #D9CFC0;
+    --danger:    #B04030;
+    --white:     #FFFFFF;
+    --shadow:    rgba(15,14,11,0.10);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--parchment);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    background: var(--ink);
+    color: var(--parchment);
+    padding: 60px 24px 48px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 80px,
+      rgba(201,151,58,0.06) 80px,
+      rgba(201,151,58,0.06) 81px
+    );
+    pointer-events: none;
+  }
+  .hero-eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(42px, 8vw, 72px);
+    line-height: 1.02;
+    margin-bottom: 16px;
+    letter-spacing: -0.01em;
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--gold);
+  }
+  .hero-sub {
+    font-size: 17px;
+    font-weight: 300;
+    color: var(--rail);
+    max-width: 520px;
+    margin: 0 auto 40px;
+    line-height: 1.6;
+  }
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+    margin-bottom: 40px;
+  }
+  .hero-stat { text-align: center; }
+  .hero-stat-val {
+    font-family: 'DM Serif Display', serif;
+    font-size: 32px;
+    color: var(--gold);
+    display: block;
+  }
+  .hero-stat-label {
+    font-size: 12px;
+    color: var(--dust);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .hero-divider {
+    width: 1px;
+    height: 40px;
+    background: rgba(201,151,58,0.3);
+    align-self: center;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .container { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+
+  /* ── SECTION ── */
+  .section { padding: 40px 0; border-bottom: 1px solid var(--rail); }
+  .section:last-child { border-bottom: none; }
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    color: var(--dust);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--rail);
+  }
+  .section h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 28px;
+    margin-bottom: 8px;
+    line-height: 1.15;
+  }
+  .section-desc {
+    color: var(--dust);
+    font-size: 15px;
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+
+  /* ── FORM ELEMENTS ── */
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  @media (max-width: 540px) { .field-row { grid-template-columns: 1fr; } }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 12px; font-weight: 500; color: var(--dust); letter-spacing: 0.04em; }
+  .field input, .field select {
+    padding: 9px 12px;
+    border: 1.5px solid var(--rail);
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    background: var(--white);
+    color: var(--ink);
+    transition: border-color 0.15s;
+    outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--gold); }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: var(--ink);
+    color: var(--parchment);
+  }
+  .btn-primary:hover { background: var(--turf); }
+  .btn-gold {
+    background: var(--gold);
+    color: var(--ink);
+  }
+  .btn-gold:hover { background: var(--gold-lt); }
+  .btn-outline {
+    background: transparent;
+    color: var(--ink);
+    border: 1.5px solid var(--rail);
+  }
+  .btn-outline:hover { border-color: var(--ink); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--white);
+    border: 1px solid var(--rail);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 10px;
+  }
+  .card-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .card-name {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    flex: 1;
+  }
+  .card-sub { font-size: 12px; color: var(--dust); margin-top: 2px; }
+
+  /* ── BADGE ── */
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 20px;
+    letter-spacing: 0.03em;
+  }
+  .badge-gold { background: #FDF3D9; color: #7A5000; }
+  .badge-turf { background: #E6F0EA; color: var(--turf); }
+  .badge-dust { background: #F1EDE5; color: var(--dust); }
+  .badge-ink  { background: var(--ink); color: var(--parchment); }
+  .badge-danger { background: #FAEAEA; color: var(--danger); }
+
+  /* ── TRAIT DOTS ── */
+  .trait-dots { display: flex; gap: 4px; align-items: center; }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--rail);
+    transition: background 0.3s;
+  }
+  .dot.known { background: var(--turf); }
+
+  /* ── RESULT ── */
+  .result-box {
+    background: var(--turf-lt);
+    border: 1px solid #B8D4C0;
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+  .result-box.win { background: #F0F8EC; border-color: #8FC98B; }
+  .result-box.lose { background: #FDF0EE; border-color: #DCA49C; }
+
+  .pos-circle {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .pos-1 { background: #FDF3D9; color: #7A5000; }
+  .pos-2 { background: #F2F2EF; color: #4A4A47; }
+  .pos-3 { background: #FAEEDA; color: #633806; }
+  .pos-other { background: var(--rail); color: var(--dust); }
+
+  /* ── RACE FIELD ── */
+  .race-entry {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--rail);
+    font-size: 13px;
+  }
+  .race-entry:last-child { border-bottom: none; }
+  .race-pos { width: 28px; text-align: center; font-weight: 500; color: var(--dust); }
+
+  /* ── TOKEN STATUS ── */
+  .status-bar {
+    background: var(--ink);
+    color: var(--parchment);
+    padding: 10px 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--rail);
+    flex-shrink: 0;
+  }
+  .status-dot.on { background: #5DBB63; }
+
+  /* ── ALERT ── */
+  .alert {
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-top: 12px;
+    display: none;
+  }
+  .alert.show { display: block; }
+  .alert-success { background: #EAF5EF; color: var(--turf); border: 1px solid #B8D4C0; }
+  .alert-error   { background: #FAEAEA; color: var(--danger); border: 1px solid #DCA49C; }
+  .alert-info    { background: #EEF4FB; color: #1A4A7A; border: 1px solid #B5D0EC; }
+
+  /* ── LOADING ── */
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── WALLET ── */
+  .wallet-display {
+    font-family: 'DM Serif Display', serif;
+    font-size: 36px;
+    color: var(--turf);
+    margin: 4px 0;
+  }
+
+  /* ── JOCKEY LIST ── */
+  .jockey-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border: 1.5px solid var(--rail);
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: border-color 0.15s, background 0.15s;
+    font-size: 13px;
+  }
+  .jockey-item:hover { border-color: var(--gold); background: #FFFCF5; }
+  .jockey-item.selected { border-color: var(--gold); background: #FFFCF5; }
+  .jockey-item.taken { opacity: 0.4; cursor: not-allowed; }
+  .jockey-name { flex: 1; font-weight: 500; }
+  .stars { color: var(--gold); font-size: 11px; letter-spacing: -1px; }
+
+  /* ── TABS ── */
+  .tab-row { display: flex; gap: 0; border-bottom: 2px solid var(--rail); margin-bottom: 24px; }
+  .tab-btn {
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--dust);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .tab-btn.active { color: var(--ink); border-bottom-color: var(--ink); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── FOOTER ── */
+  .footer {
+    background: var(--ink);
+    color: var(--dust);
+    text-align: center;
+    padding: 32px 20px;
+    font-size: 13px;
+    margin-top: 60px;
+  }
+  .footer strong { color: var(--gold); font-family: 'DM Serif Display', serif; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-eyebrow">Live demo — production platform</div>
+  <h1>Own. Race. <em>Win.</em></h1>
+  <p class="hero-sub">StableGate is a skill-based simulated horse racing platform where strategy, jockey selection, and horse knowledge drive real economic outcomes.</p>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <span class="hero-stat-val">30</span>
+      <span class="hero-stat-label">AI Jockeys</span>
+    </div>
+    <div class="hero-divider"></div>
+    <div class="hero-stat">
+      <span class="hero-stat-val">8</span>
+      <span class="hero-stat-label">Traits per horse</span>
+    </div>
+    <div class="hero-divider"></div>
+    <div class="hero-stat">
+      <span class="hero-stat-val">50</span>
+      <span class="hero-stat-label">Race career cap</span>
+    </div>
+    <div class="hero-divider"></div>
+    <div class="hero-stat">
+      <span class="hero-stat-val">5</span>
+      <span class="hero-stat-label">Race tiers</span>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span class="status-dot" id="api-dot"></span>
+  <span id="api-status">Connecting to StableGate API...</span>
+  <span style="margin-left:auto;color:var(--dust);font-size:11px">stablegate-production.up.railway.app</span>
+</div>
+
+<div class="container">
+
+  <!-- AUTH -->
+  <div class="section" id="section-auth">
+    <div class="section-label">Step 1</div>
+    <h2>Create your account</h2>
+    <p class="section-desc">Register to get started. Your wallet and stable persist — come back any time.</p>
+
+    <div class="tab-row">
+      <button class="tab-btn active" onclick="switchAuthTab('register')">Register</button>
+      <button class="tab-btn" onclick="switchAuthTab('login')">Log in</button>
+    </div>
+
+    <div id="tab-register" class="tab-panel active">
+      <div class="field-row">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="reg-email" placeholder="you@email.com">
+        </div>
+        <div class="field">
+          <label>Username</label>
+          <input type="text" id="reg-username" placeholder="stablemaster">
+        </div>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="reg-password" placeholder="8+ characters">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="register()">Create account</button>
+      </div>
+      <div class="alert" id="reg-alert"></div>
+    </div>
+
+    <div id="tab-login" class="tab-panel">
+      <div class="field-row">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="you@email.com">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="login-password" placeholder="Your password">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="login()">Log in</button>
+      </div>
+      <div class="alert" id="login-alert"></div>
+    </div>
+  </div>
+
+  <!-- STABLE -->
+  <div class="section" id="section-stable" style="display:none">
+    <div class="section-label">Step 2</div>
+    <h2>Build your stable</h2>
+    <p class="section-desc">Browse the marketplace and buy your first horse. Each horse has 8 traits — most start hidden and reveal through racing.</p>
+
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:20px">
+      <div>
+        <div style="font-size:12px;color:var(--dust);margin-bottom:2px">Wallet balance</div>
+        <div class="wallet-display" id="wallet-display">$0.00</div>
+      </div>
+      <div style="margin-left:auto">
+        <span id="logged-in-as" style="font-size:13px;color:var(--dust)"></span>
+      </div>
+    </div>
+
+    <div id="my-horses"></div>
+
+    <div style="margin-top:20px">
+      <div class="section-label">Marketplace</div>
+      <div id="marketplace-list"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="loadMarketplace()">Refresh listings</button>
+      </div>
+    </div>
+    <div class="alert" id="stable-alert"></div>
+  </div>
+
+  <!-- RACE -->
+  <div class="section" id="section-race" style="display:none">
+    <div class="section-label">Step 3</div>
+    <h2>Enter a race</h2>
+    <p class="section-desc">Pick an open race, choose your horse, and select a jockey. Jockey style matching your horse's running style gives a +14% bonus.</p>
+
+    <div id="race-list"></div>
+    <div class="alert" id="race-alert"></div>
+
+    <div id="jockey-section" style="display:none;margin-top:24px">
+      <div class="section-label">Pick a jockey</div>
+      <p style="font-size:13px;color:var(--dust);margin-bottom:12px">Your horse runs as a <strong id="horse-style-display"></strong>. Match the style for a bonus.</p>
+      <div id="jockey-list"></div>
+      <div class="btn-row">
+        <button class="btn btn-gold" id="confirm-jockey-btn" onclick="confirmJockey()" disabled>Confirm jockey & enter race</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="section" id="section-results" style="display:none">
+    <div class="section-label">Results</div>
+    <h2>Race complete</h2>
+    <div id="result-display"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="runAnother()">Enter another race</button>
+      <button class="btn btn-outline" onclick="refreshWallet()">Check wallet</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <strong>StableGate</strong> &nbsp;·&nbsp; Strategy. Skill. Simulation. &nbsp;·&nbsp; Live platform — real economy
+</div>
+
+<script>
+const API = 'https://stablegate-production.up.railway.app/api/v1'
+let TOKEN = null
+let USER = null
+let selectedHorse = null
+let selectedRaceId = null
+let selectedJockeyId = null
+let enteredRaceId = null
+
+// ── UTILITIES ──────────────────────────────────────────────────────────────
+
+function fmt(n) { return '$' + parseFloat(n).toFixed(2) }
+function show(id) { document.getElementById(id).style.display = 'block' }
+function hide(id) { document.getElementById(id).style.display = 'none' }
+function alert_show(id, msg, type) {
+  const el = document.getElementById(id)
+  el.className = `alert show alert-${type}`
+  el.innerHTML = msg
+}
+function alert_hide(id) {
+  document.getElementById(id).className = 'alert'
+}
+
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`
+  const res = await fetch(API + path, { ...opts, headers: { ...headers, ...opts.headers } })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || JSON.stringify(data))
+  return data
+}
+
+// ── API HEALTH ─────────────────────────────────────────────────────────────
+
+async function checkHealth() {
+  try {
+    await fetch('https://stablegate-production.up.railway.app/health')
+    document.getElementById('api-dot').classList.add('on')
+    document.getElementById('api-status').textContent = 'StableGate API — online'
+  } catch {
+    document.getElementById('api-status').textContent = 'API offline — check connection'
+  }
+}
+
+// ── AUTH ───────────────────────────────────────────────────────────────────
+
+function switchAuthTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'))
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
+  document.querySelector(`[onclick="switchAuthTab('${tab}')"]`).classList.add('active')
+  document.getElementById(`tab-${tab}`).classList.add('active')
+}
+
+async function register() {
+  const email = document.getElementById('reg-email').value.trim()
+  const username = document.getElementById('reg-username').value.trim()
+  const password = document.getElementById('reg-password').value
+  if (!email || !username || !password) return alert_show('reg-alert', 'All fields required.', 'error')
+  try {
+    alert_show('reg-alert', '<span class="spinner"></span> Creating account...', 'info')
+    const data = await api('/auth/register', { method: 'POST', body: JSON.stringify({ email, username, password }) })
+    TOKEN = data.token
+    USER = data.user
+    onLoggedIn()
+  } catch(e) {
+    alert_show('reg-alert', e.message, 'error')
+  }
+}
+
+async function login() {
+  const email = document.getElementById('login-email').value.trim()
+  const password = document.getElementById('login-password').value
+  if (!email || !password) return alert_show('login-alert', 'All fields required.', 'error')
+  try {
+    alert_show('login-alert', '<span class="spinner"></span> Logging in...', 'info')
+    const data = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+    TOKEN = data.token
+    USER = data.user
+    onLoggedIn()
+  } catch(e) {
+    alert_show('login-alert', e.message, 'error')
+  }
+}
+
+async function onLoggedIn() {
+  show('section-stable')
+  show('section-race')
+  document.getElementById('section-auth').style.borderBottom = '1px solid var(--rail)'
+  document.getElementById('logged-in-as').textContent = `Logged in as @${USER.username}`
+  await refreshWallet()
+  await loadMyHorses()
+  await loadMarketplace()
+  await loadRaces()
+  document.getElementById('section-stable').scrollIntoView({ behavior: 'smooth' })
+}
+
+async function refreshWallet() {
+  try {
+    const data = await api('/auth/me')
+    USER = data.user
+    document.getElementById('wallet-display').textContent = fmt(USER.walletBalance)
+  } catch {}
+}
+
+// ── STABLE ─────────────────────────────────────────────────────────────────
+
+const styleColor = { FRONT_RUNNER: 'badge-ink', STALKER: 'badge-turf', PRESSER: 'badge-gold', CLOSER: 'badge-dust' }
+const styleName  = { FRONT_RUNNER: 'Front runner', STALKER: 'Stalker', PRESSER: 'Presser', CLOSER: 'Closer' }
+
+async function loadMyHorses() {
+  try {
+    const data = await api('/horses')
+    const el = document.getElementById('my-horses')
+    if (!data.horses.length) {
+      el.innerHTML = '<p style="color:var(--dust);font-size:14px">No horses yet — buy one from the marketplace below.</p>'
+      return
+    }
+    el.innerHTML = '<div class="section-label">My stable</div>' + data.horses.map(h => `
+      <div class="card" style="cursor:pointer;border-color:${selectedHorse?.id === h.id ? 'var(--gold)' : 'var(--rail)'}" onclick="selectHorse('${h.id}')">
+        <div class="card-row">
+          <div>
+            <div class="card-name">${h.name}</div>
+            <div class="card-sub">${h.totalRaces} races · ${h.wins} wins · Race ${h.totalRaces}/50</div>
+          </div>
+          <span class="badge ${styleColor[h.runningStyle] || 'badge-dust'}">${styleName[h.runningStyle] || h.runningStyle}</span>
+          <span style="font-size:22px;font-weight:500;color:var(--ink)">${h.speedFigure}</span>
+          <div class="trait-dots">${Array.from({length:8},(_,i)=>`<div class="dot ${i<h.traitsDiscovered?'known':''}"></div>`).join('')}</div>
+          ${selectedHorse?.id === h.id ? '<span class="badge badge-gold">Selected</span>' : ''}
+        </div>
+      </div>
+    `).join('')
+  } catch(e) {
+    document.getElementById('my-horses').innerHTML = `<p style="color:var(--dust)">Error loading stable.</p>`
+  }
+}
+
+function selectHorse(id) {
+  // find horse from DOM data — re-fetch
+  api('/horses').then(data => {
+    selectedHorse = data.horses.find(h => h.id === id)
+    loadMyHorses()
+    if (selectedHorse) {
+      alert_show('stable-alert', `${selectedHorse.name} selected — scroll down to enter a race.`, 'success')
+      setTimeout(() => alert_hide('stable-alert'), 3000)
+    }
+  })
+}
+
+async function loadMarketplace() {
+  try {
+    const data = await api('/marketplace')
+    const el = document.getElementById('marketplace-list')
+    const listings = data.listings.slice(0, 12)
+    if (!listings.length) { el.innerHTML = '<p style="color:var(--dust);font-size:14px">No listings right now.</p>'; return }
+    el.innerHTML = listings.map(l => {
+      const h = l.horse
+      return `<div class="card">
+        <div class="card-row">
+          <div>
+            <div class="card-name">${h.name}</div>
+            <div class="card-sub">Speed ${h.speedFigure} · ${h.wins}W · ${h.traitsDiscovered}/8 traits known</div>
+          </div>
+          <span class="badge ${styleColor[h.runningStyle] || 'badge-dust'}">${styleName[h.runningStyle] || h.runningStyle}</span>
+          <div>
+            <div style="font-size:16px;font-weight:500">${fmt(l.askingPrice)}</div>
+            <button class="btn btn-gold" style="margin-top:6px;font-size:12px;padding:5px 12px" onclick="buyHorse('${l.id}','${h.name}',${l.askingPrice})">Buy</button>
+          </div>
+        </div>
+      </div>`
+    }).join('')
+  } catch {}
+}
+
+async function buyHorse(listingId, name, price) {
+  if (Number(USER.walletBalance) < price) {
+    alert_show('stable-alert', `Insufficient balance. You need ${fmt(price)} — your wallet has ${fmt(USER.walletBalance)}.`, 'error')
+    return
+  }
+  try {
+    alert_show('stable-alert', `<span class="spinner"></span> Purchasing ${name}...`, 'info')
+    await api(`/marketplace/${listingId}/buy`, { method: 'POST', body: '{}' })
+    alert_show('stable-alert', `${name} is now in your stable!`, 'success')
+    await refreshWallet()
+    await loadMyHorses()
+    await loadMarketplace()
+  } catch(e) {
+    alert_show('stable-alert', e.message, 'error')
+  }
+}
+
+// ── RACES ──────────────────────────────────────────────────────────────────
+
+const tierColors = { FREE: 'badge-turf', BRONZE: 'badge-gold', SILVER: 'badge-dust', GOLD: 'badge-gold', CLASSIC: 'badge-ink' }
+
+async function loadRaces() {
+  try {
+    const data = await api('/races?status=OPEN')
+    const el = document.getElementById('race-list')
+    const races = data.races.filter(r => ['FREE','BRONZE','SILVER'].includes(r.tier)).slice(0, 8)
+    if (!races.length) { el.innerHTML = '<p style="color:var(--dust)">No races open right now — check back shortly.</p>'; return }
+    el.innerHTML = races.map(r => {
+      const entries = r.entries?.filter(e => !e.isGhostEntry).length || 0
+      const pct = Math.round((entries / r.fieldSize) * 100)
+      return `<div class="card" style="cursor:pointer" onclick="selectRace('${r.id}')">
+        <div class="card-row">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-weight:500;font-size:15px">${r.name}</span>
+              <span class="badge ${tierColors[r.tier]}">${r.tier}</span>
+            </div>
+            <div style="font-size:12px;color:var(--dust);margin-bottom:8px">${r.surface} · ${r.distance} · ${r.entryFee > 0 ? fmt(r.entryFee)+' entry' : 'Free'}</div>
+            <div style="background:var(--rail);border-radius:3px;height:4px;overflow:hidden">
+              <div style="width:${pct}%;height:4px;background:var(--turf);border-radius:3px;transition:width 0.4s"></div>
+            </div>
+            <div style="font-size:11px;color:var(--dust);margin-top:4px">${entries}/${r.fieldSize} entered</div>
+          </div>
+          <button class="btn btn-outline" style="font-size:12px">Enter →</button>
+        </div>
+      </div>`
+    }).join('')
+  } catch(e) {
+    document.getElementById('race-list').innerHTML = `<p style="color:var(--dust)">Error loading races.</p>`
+  }
+}
+
+async function selectRace(raceId) {
+  if (!selectedHorse) {
+    alert_show('race-alert', 'Select a horse from your stable first.', 'error')
+    document.getElementById('section-stable').scrollIntoView({ behavior: 'smooth' })
+    return
+  }
+  selectedRaceId = raceId
+  alert_hide('race-alert')
+
+  try {
+    alert_show('race-alert', `<span class="spinner"></span> Entering race with ${selectedHorse.name}...`, 'info')
+    await api(`/races/${raceId}/enter`, { method: 'POST', body: JSON.stringify({ horseId: selectedHorse.id }) })
+    enteredRaceId = raceId
+    await loadJockeys(raceId)
+    alert_hide('race-alert')
+  } catch(e) {
+    alert_show('race-alert', e.message, 'error')
+  }
+}
+
+async function loadJockeys(raceId) {
+  try {
+    const data = await api(`/jockeys/available/${raceId}`)
+    const jockeys = data.jockeys
+    show('jockey-section')
+    document.getElementById('horse-style-display').textContent = styleName[selectedHorse.runningStyle] || selectedHorse.runningStyle
+
+    const stars = { ELITE: '★★★★★', TOP: '★★★★', MID: '★★★', BUDGET: '★★', ROOKIE: '★' }
+    const matchBonus = (js) => js === selectedHorse.runningStyle ? ' <span style="color:var(--turf);font-size:11px">+14% match</span>' : ''
+
+    document.getElementById('jockey-list').innerHTML = jockeys.slice(0, 15).map(j => `
+      <div class="jockey-item ${j.assignmentStatus !== 'AVAILABLE' ? 'taken' : ''}" 
+           id="jockey-${j.id}"
+           onclick="${j.assignmentStatus === 'AVAILABLE' ? `pickJockey('${j.id}')` : ''}">
+        <div class="jockey-name">${j.name}${matchBonus(j.runningStyle)}</div>
+        <span class="badge badge-dust" style="font-size:10px">${styleName[j.runningStyle] || j.runningStyle}</span>
+        <span class="stars">${stars[j.tier] || '★'}</span>
+        <span style="font-size:11px;color:var(--dust)">${Math.round(j.winRate*100)}% W</span>
+        ${j.assignmentStatus !== 'AVAILABLE' ? '<span style="font-size:11px;color:var(--dust)">Taken</span>' : ''}
+      </div>
+    `).join('')
+  } catch(e) {
+    alert_show('race-alert', 'Error loading jockeys: ' + e.message, 'error')
+  }
+}
+
+function pickJockey(id) {
+  selectedJockeyId = id
+  document.querySelectorAll('.jockey-item').forEach(el => el.classList.remove('selected'))
+  const el = document.getElementById(`jockey-${id}`)
+  if (el) el.classList.add('selected')
+  document.getElementById('confirm-jockey-btn').disabled = false
+}
+
+async function confirmJockey() {
+  if (!selectedJockeyId || !enteredRaceId) return
+  try {
+    alert_show('race-alert', '<span class="spinner"></span> Assigning jockey...', 'info')
+    await api(`/races/${enteredRaceId}/pick-jockey`, {
+      method: 'POST',
+      body: JSON.stringify({ jockeyId: selectedJockeyId, horseId: selectedHorse.id })
+    })
+    alert_show('race-alert', '<span class="spinner"></span> Running simulation...', 'info')
+    await api(`/admin/races/${enteredRaceId}/force-simulate`, { method: 'POST', body: '{}' })
+    await new Promise(r => setTimeout(r, 10000))
+    await showResults()
+  } catch(e) {
+    alert_show('race-alert', e.message, 'error')
+  }
+}
+
+async function showResults() {
+  try {
+    const data = await api(`/admin/races/${enteredRaceId}/audit`)
+    const outputs = data.simulationOutputs
+    if (!outputs || data.race.status !== 'COMPLETED') {
+      alert_show('race-alert', 'Simulation still processing — please wait a moment and refresh.', 'info')
+      return
+    }
+
+    const myEntry = data.race.entries.find(e => e.horseId === selectedHorse.id)
+    const myResult = outputs.find(r => r.entry_id === myEntry?.id)
+    const position = myResult?.position || '?'
+    const isWin = position === 1
+    const isTop3 = position <= 3
+
+    const posClass = position === 1 ? 'pos-1' : position === 2 ? 'pos-2' : position === 3 ? 'pos-3' : 'pos-other'
+    const posLabel = position === 1 ? '1st' : position === 2 ? '2nd' : position === 3 ? '3rd' : `${position}th`
+
+    const payout = myEntry?.payout || 0
+    const entryFee = data.race.entryFee || 0
+    const net = payout - entryFee
+
+    const resultClass = isWin ? 'win' : isTop3 ? '' : 'lose'
+
+    show('section-results')
+    hide('jockey-section')
+    document.getElementById('section-results').scrollIntoView({ behavior: 'smooth' })
+
+    document.getElementById('result-display').innerHTML = `
+      <div class="result-box ${resultClass}">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+          <div class="pos-circle ${posClass}" style="width:52px;height:52px;font-size:22px">${posLabel}</div>
+          <div>
+            <div style="font-family:'DM Serif Display',serif;font-size:22px">${selectedHorse.name}</div>
+            <div style="font-size:13px;color:var(--dust)">${data.race.name} · Finish time: ${myResult?.finish_time || '—'}</div>
+          </div>
+          <div style="margin-left:auto;text-align:right">
+            <div style="font-size:24px;font-weight:500;color:${net >= 0 ? 'var(--turf)' : 'var(--danger)'}">${net >= 0 ? '+' : ''}${fmt(net)}</div>
+            <div style="font-size:12px;color:var(--dust)">net ${payout > 0 ? fmt(payout)+' paid out' : 'no payout'}</div>
+          </div>
+        </div>
+        ${myResult?.debug ? `
+        <div style="font-size:12px;color:var(--dust);padding-top:12px;border-top:1px solid var(--rail)">
+          <strong>Simulation breakdown</strong><br>
+          Speed base: ${(myResult.debug.base_score * 100).toFixed(1)} · 
+          Surface fit: ${(myResult.debug.surface_coeff * 100).toFixed(0)}% · 
+          Distance fit: ${(myResult.debug.distance_coeff * 100).toFixed(0)}% · 
+          Style match: ${(myResult.debug.style_modifier * 100).toFixed(0)}% · 
+          Jockey: ${(myResult.debug.jockey_modifier * 100).toFixed(0)}%
+        </div>` : ''}
+      </div>
+
+      <div style="margin-top:16px">
+        <div class="section-label">Full field results</div>
+        ${outputs.filter(r => !r.is_ghost).sort((a,b) => a.position - b.position).map(r => {
+          const entry = data.race.entries.find(e => e.id === r.entry_id)
+          const isMe = entry?.horseId === selectedHorse.id
+          const horse = entry?.horse
+          return `<div class="race-entry" style="${isMe ? 'font-weight:500' : ''}">
+            <div class="race-pos">${r.position}</div>
+            <div style="flex:1">${horse?.name || 'Unknown'} ${isMe ? '← You' : ''}</div>
+            <div style="font-size:12px;color:var(--dust)">${r.finish_time}</div>
+            ${entry?.payout > 0 ? `<div style="font-size:12px;color:var(--turf)">${fmt(entry.payout)}</div>` : ''}
+          </div>`
+        }).join('')}
+      </div>
+    `
+
+    await refreshWallet()
+    await loadMyHorses()
+    alert_hide('race-alert')
+  } catch(e) {
+    alert_show('race-alert', 'Error loading results: ' + e.message, 'error')
+  }
+}
+
+function runAnother() {
+  hide('section-results')
+  selectedRaceId = null
+  selectedJockeyId = null
+  enteredRaceId = null
+  hide('jockey-section')
+  alert_hide('race-alert')
+  loadRaces()
+  document.getElementById('section-race').scrollIntoView({ behavior: 'smooth' })
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+
+checkHealth()
+</script>
+</body>
+</html>
