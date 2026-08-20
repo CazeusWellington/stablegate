@@ -16,6 +16,7 @@ export function initRaceCreationScheduler() {
 
     scheduleGoldStakes()
     setInterval(scheduleGoldStakes, 7 * 24 * 60 * 60_000)
+        setInterval(autoFillStaleRaces, 60_000)
   }, 5000)
 
   console.log('Race scheduler started')
@@ -74,6 +75,61 @@ async function scheduleGoldStakes() {
   })
 }
 
+
+async function autoFillStaleRaces() {
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+
+  const staleRaces = await prisma.race.findMany({
+    where: {
+      status: { in: ['OPEN', 'FILLING'] },
+      createdAt: { lte: fiveMinutesAgo },
+    },
+    include: { entries: true }
+  })
+
+  for (const race of staleRaces) {
+    const realEntries = race.entries.filter(e => !e.isGhostEntry)
+    if (realEntries.length === 0) continue
+
+    const spotsNeeded = race.minFieldSize - race.entries.length
+    if (spotsNeeded <= 0) continue
+
+    console.log(`Auto-filling ${race.name} with ${spotsNeeded} ghost entries`)
+
+    for (let i = 0; i < spotsNeeded; i++) {
+      const ghostHorseId = await getGhostHorseId()
+      await prisma.raceEntry.create({
+        data: {
+          raceId: race.id,
+          horseId: ghostHorseId,
+          userId: 'cmt1s961o000p8fpb15s4shik',
+          isGhostEntry: true,
+          entryFeePaid: 0,
+          jockeyPct: race.jockeyPct,
+        }
+      })
+    }
+
+    await prisma.race.update({
+      where: { id: race.id },
+      data: {
+        status: 'AUCTION',
+        auctionOpensAt: new Date(),
+        auctionClosesAt: new Date(Date.now() + race.auctionWindowSecs * 1000),
+      }
+    })
+  }
+}
+
+async function getGhostHorseId(): Promise<string> {
+  const horses = await prisma.horse.findMany({
+    where: { ownerId: 'cmt1s961o000p8fpb15s4shik' },
+    select: { id: true },
+    take: 20,
+  })
+  if (horses.length === 0) throw new Error('No house horses for ghost entries')
+  return horses[Math.floor(Math.random() * horses.length)].id
+}
 async function createRace(
   tier: RaceTier,
   entryFee: number,
