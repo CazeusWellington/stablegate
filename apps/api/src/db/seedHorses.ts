@@ -3,7 +3,7 @@ import { generateHorse } from '../services/horseGenerator'
 
 const prisma = new PrismaClient()
 
-const HOUSE_USER_ID = 'house'
+const HOUSE_USER_ID = 'cmt1s961o000p8fpb15s4shik'
 
 const BATCHES = [
   { tier: 'MAIDEN', count: 10, price: 50 },
